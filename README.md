@@ -6,7 +6,7 @@ This gives users full control over the pre-processing and merging of the origina
 This package features:
 - Query available services from ArcGIS REST endpoints.
 - Download raster tiles that intersect with a specified bounding box.
-- Create Cloud Optimized GeoTIFFs (COGs) from downloaded tiles.
+- Create Cloud Optimized GeoTIFFs (COGs) from downloaded & merged tiles.
 
 This repository is configured to work with the ArcGIS ImageServer REST API from [GIS Steiermark](https://gis.stmk.gv.at). You can also explore the [different ways of accessing](https://gis.stmk.gv.at/image/rest/services/OGD_DOP) their open raster and vector data.
 

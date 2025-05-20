@@ -82,6 +82,9 @@ def download_raster_tiles_from_service_url(
     file_endpoint_url = f"{service_url}/{service_name}/ImageServer/file"
     image_server_url = f"{service_url}/{service_name}/ImageServer"
 
+    output_directory = Path(output_directory)
+    output_directory.mkdir(parents=True, exist_ok=True)
+
     print(f"Downloading tiles from service: {service_name}")
 
     if bbox_gpkg_path is not None:
@@ -113,7 +116,7 @@ def download_raster_tiles_from_service_url(
     metadata_filepath = os.path.join(output_directory, metadata_filename)
     with open(metadata_filepath, "w") as metadata_file:
         json.dump(metadata_response.json(), metadata_file)
-
+    print(f"Metadata saved to {metadata_filepath}")
     file_param_list = {}
 
     # Get parameters for relevant files
@@ -185,6 +188,7 @@ def download_raster_tiles_from_service_url(
         with open(metadata_filepath, "w") as metadata_file:
             json.dump(metadata_response.json(), metadata_file)
         output_files.append(output_filepath)
+    print(f"Downloaded {len(output_files)} tiles to {output_directory}")
 
     return output_files
 

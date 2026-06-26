@@ -1,4 +1,4 @@
-"""Download the whole GIS Steiermark orthophoto archive (all tiles, no bbox).
+"""Download whole GIS Steiermark archives (all tiles, no bbox), in parallel.
 
 This wrapper downloads every tile of one or more ArcGIS ImageServer services to
 a local directory, in parallel. It is meant for grabbing a complete archive
@@ -7,13 +7,24 @@ a local directory, in parallel. It is meant for grabbing a complete archive
 No COGs are created: the script only fetches the original tiles plus their
 metadata, so you keep full control over any later merging / processing.
 
-Example:
-    python scripts/download_whole_archive.py \
-        --output-dir /media/data/gis_stmk_complete_archive \
-        --services Falschfarben_2008_2011 Flug_2013_2015_RGB \
-        --max-workers 5
+Two presets are built in (select with --preset):
+  - orthophoto : RGB and Falschfarben (CIR) imagery from the OGD_DOP endpoint.
+  - dom        : the provincewide surface model (DOM) from the OGD_Hoehen
+                 endpoint.
 
-Run without --services to download every service offered by the endpoint.
+Examples:
+    # All orthophoto services (RGB + CIR) for the whole province
+    python scripts/download_whole_archive.py --preset orthophoto \
+        --output-dir /media/data/gis_stmk_orthophotos
+
+    # The provincewide DOM
+    python scripts/download_whole_archive.py --preset dom \
+        --output-dir /media/data/gis_stmk_dom --max-workers 5
+
+    # A specific selection of services
+    python scripts/download_whole_archive.py --preset dom \
+        --services ALS_Hoehen_2008_2014_DOM_50cm_UTM33N_32633 \
+        --output-dir /media/data/gis_stmk_dom_2008
 """
 
 import argparse
@@ -28,24 +39,38 @@ from src.arcgis_rest_downloader import (  # noqa: E402
     download_raster_tiles_from_service_url,
 )
 
-# Default endpoint: GIS Steiermark open orthophotos.
-DEFAULT_SERVICE_URL = "https://gis.stmk.gv.at/image/rest/services/OGD_DOP"
-
-# Services available as of May 2025. Pass --services to override.
-DEFAULT_SERVICES = [
-    "Falschfarben_2008_2011",
-    "Falschfarben_2013_2015",
-    "Falschfarben_2016_2018",
-    "Falschfarben_2019_2021",
-    "Falschfarben_2022_2024",
-    "Flug_2003_2007_RGB",
-    "Flug_2008_2011_RGB",
-    "Flug_2013_2015_RGB",
-    "Flug_2016_2018_RGB",
-    "Flug_2019_2021_RGB",
-    "Flug_2022_2024_RGB",
-    "SW_1994_2001",
-]
+# Built-in presets: endpoint URL + sensible default service list.
+PRESETS = {
+    # RGB and Falschfarben (CIR) orthophotos. Services available as of May 2025.
+    "orthophoto": {
+        "service_url": "https://gis.stmk.gv.at/image/rest/services/OGD_DOP",
+        "services": [
+            "Falschfarben_2008_2011",
+            "Falschfarben_2013_2015",
+            "Falschfarben_2016_2018",
+            "Falschfarben_2019_2021",
+            "Falschfarben_2022_2024",
+            "Flug_2003_2007_RGB",
+            "Flug_2008_2011_RGB",
+            "Flug_2013_2015_RGB",
+            "Flug_2016_2018_RGB",
+            "Flug_2019_2021_RGB",
+            "Flug_2022_2024_RGB",
+            "SW_1994_2001",
+        ],
+    },
+    # Digital surface model (DOM). Of the DOM services on the OGD_Hoehen
+    # endpoint, only "aktuell" covers the whole province (its extent matches
+    # the orthophotos). The 2008_2014 campaign spans only a ~154x95 km
+    # sub-area and the 2022_2027 campaign is still incomplete, so neither is a
+    # provincewide default. Pass --services to grab a specific campaign.
+    "dom": {
+        "service_url": "https://gis.stmk.gv.at/image/rest/services/OGD_Hoehen",
+        "services": [
+            "ALS_Hoehen_aktuell_DOM_UTM33N_32633",
+        ],
+    },
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -61,17 +86,22 @@ def parse_args() -> argparse.Namespace:
         "after the service (lowercased).",
     )
     parser.add_argument(
+        "--preset",
+        choices=sorted(PRESETS),
+        default="orthophoto",
+        help="Which built-in endpoint + default service list to use.",
+    )
+    parser.add_argument(
         "--service-url",
-        default=DEFAULT_SERVICE_URL,
-        help="Base URL of the ArcGIS REST service collection.",
+        default=None,
+        help="Override the preset's ArcGIS REST endpoint URL.",
     )
     parser.add_argument(
         "--services",
         nargs="*",
         default=None,
-        help="Service names to download. Default: the known GIS Steiermark "
-        "orthophoto services. Pass 'all' to download every service offered by "
-        "the endpoint.",
+        help="Service names to download. Default: the preset's service list. "
+        "Pass 'all' to download every service offered by the endpoint.",
     )
     parser.add_argument(
         "--max-workers",
@@ -98,8 +128,12 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
+    preset = PRESETS[args.preset]
+    service_url = args.service_url or preset["service_url"]
+
+    print(f"Endpoint: {service_url}")
     print("Fetching available services ...")
-    services_df = get_arcgis_services_to_pd(args.service_url)
+    services_df = get_arcgis_services_to_pd(service_url)
     available = set(services_df["service_name"])
 
     # Resolve which services to download.
@@ -108,7 +142,7 @@ def main() -> None:
     elif args.services:
         services = args.services
     else:
-        services = DEFAULT_SERVICES
+        services = preset["services"]
 
     # Warn about anything the endpoint does not actually offer.
     missing = [s for s in services if s not in available]
@@ -131,7 +165,7 @@ def main() -> None:
         print(f"\n=== {service_name} -> {raw_data_folder} ===")
         try:
             download_raster_tiles_from_service_url(
-                service_url=args.service_url,
+                service_url=service_url,
                 service_name=service_name,
                 output_directory=raw_data_folder,
                 bbox_gpkg_path=None,

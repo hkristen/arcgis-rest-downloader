@@ -40,24 +40,35 @@ Keep `max_workers` modest (e.g. 5) to stay friendly to the server.
 
 ### Download the whole archive
 
-To download entire services (e.g. the complete orthophoto archive for all of Styria), use the wrapper script in `scripts/`. It downloads the original tiles plus their metadata, without creating COGs, so you keep full control over any later merging:
+To download entire services (e.g. the complete archive for all of Styria), use the wrapper script in `scripts/`. It downloads the original tiles plus their metadata, without creating COGs, so you keep full control over any later merging. Two built-in presets select the endpoint and a sensible default service list:
+
+- `--preset orthophoto` (default): RGB and Falschfarben (CIR) imagery from the `OGD_DOP` endpoint.
+- `--preset dom`: the provincewide digital surface model (DOM) from the `OGD_Hoehen` endpoint.
 
 ```bash
-# A selection of services into per-service subfolders
-python scripts/download_whole_archive.py \
-    --output-dir /media/data/gis_stmk_complete_archive \
+# All orthophoto services (RGB + CIR) for the whole province
+python scripts/download_whole_archive.py --preset orthophoto \
+    --output-dir /media/data/gis_stmk_orthophotos --max-workers 5
+
+# The provincewide DOM
+python scripts/download_whole_archive.py --preset dom \
+    --output-dir /media/data/gis_stmk_dom --max-workers 5
+
+# A specific selection of services
+python scripts/download_whole_archive.py --preset orthophoto \
     --services Falschfarben_2008_2011 Flug_2013_2015_RGB \
-    --max-workers 5
+    --output-dir /media/data/gis_stmk_orthophotos
 
 # Every service offered by the endpoint
-python scripts/download_whole_archive.py \
-    --output-dir /media/data/gis_stmk_complete_archive \
-    --services all
+python scripts/download_whole_archive.py --preset dom --services all \
+    --output-dir /media/data/gis_stmk_hoehen
 ```
 
-Run `python scripts/download_whole_archive.py --help` for all options. Omitting `--services` downloads the known GIS Steiermark orthophoto services.
+Run `python scripts/download_whole_archive.py --help` for all options.
 
-Note: this script and its default service list cover only the RGB and Falschfarben (CIR) orthophoto imagery (`OGD_DOP` endpoint). Elevation data (DOM/DGM from the `OGD_Hoehen` endpoint) is not included here.
+Notes on coverage:
+- The `orthophoto` preset covers only the RGB and Falschfarben (CIR) imagery (`OGD_DOP` endpoint).
+- For elevation, only `ALS_Hoehen_aktuell_DOM_UTM33N_32633` covers the whole province (its extent matches the orthophotos), so it is the `dom` preset default. The `ALS_Hoehen_2008_2014_*` campaign spans only a ~154x95 km sub-area, and the `ALS_Hoehen_2022_2027_*` campaign is still incomplete. To grab a specific campaign or the DGM (terrain) instead, pass it via `--services`.
 
 ## ToDo
 - Implement processing of DEM data to generate derived products (e.g., slope, aspect).

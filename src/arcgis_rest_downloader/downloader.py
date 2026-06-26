@@ -1,8 +1,9 @@
 import json
 import os
 import tempfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import List, Optional, Tuple, Union
 
 import pandas as pd
 import requests
@@ -54,6 +55,108 @@ def get_arcgis_services_to_pd(base_url: str) -> pd.DataFrame:
     return services_df
 
 
+def _get_tile_metadata(
+    tile_id: Union[str, int], download_url: str
+) -> Optional[Tuple[str, dict]]:
+    """Resolves the downloadable file parameters for a single tile.
+
+    Args:
+        tile_id: Object id of the tile in the ImageServer.
+        download_url: URL of the service's download endpoint.
+
+    Returns:
+        Tuple of (filename, file_params) for a downloadable tile, or None if the
+        tile errored, has no raster files, or is an overview tile.
+    """
+    download_params = {"rasterIds": str(tile_id), "f": "json"}
+
+    try:
+        response_download_one_tile = requests.get(download_url, download_params)
+        response_download_one_tile.raise_for_status()
+        data_one_tile = response_download_one_tile.json()
+
+        # Skip tiles with errors or missing data
+        if "error" in data_one_tile:
+            return None
+        if "rasterFiles" not in data_one_tile or not data_one_tile["rasterFiles"]:
+            return None
+
+        tile_filepath = data_one_tile["rasterFiles"][0]["id"]
+        filename = tile_filepath.split("\\")[-1]
+
+        # Skip files that start with "Ov_" -> these are overview tiles we don't need
+        if filename.startswith("Ov_"):
+            return None
+
+        file_params = {
+            "id": tile_filepath,
+            "rasterId": str(tile_id),
+        }
+        return (filename, file_params)
+
+    except Exception as e:
+        # Skip any tile that causes problems, but make it visible
+        print(f"Warning: could not gather metadata for tile {tile_id}: {e}")
+        return None
+
+
+def _download_single_tile(
+    filename: str,
+    file_params: dict,
+    file_endpoint_url: str,
+    output_directory: Union[str, Path],
+    image_server_url: str,
+    max_retry: int = 5,
+) -> Path:
+    """Downloads one tile and its metadata to the output directory.
+
+    Args:
+        filename: Target filename for the tile.
+        file_params: Parameters identifying the file on the file endpoint.
+        file_endpoint_url: URL of the service's file endpoint.
+        output_directory: Directory to save the tile and its metadata.
+        image_server_url: Base ImageServer URL (used for the tile metadata).
+        max_retry: Maximum number of retries for failed requests.
+
+    Returns:
+        Path to the downloaded tile.
+    """
+    output_filepath = Path(os.path.join(output_directory, filename))
+
+    # Check if tile is already downloaded
+    if os.path.isfile(output_filepath):
+        return output_filepath
+
+    def get_request(retries=1):
+        try:
+            return requests.get(file_endpoint_url, file_params)
+        except Exception as e:
+            print(f"Request failed for {filename}: {e}")
+            if retries >= max_retry:
+                raise Exception from e
+            retries += 1
+            print(f"Retrying {filename} (attempt {retries}) ...")
+            return get_request(retries=retries)
+
+    response_file_endpoint_one_tile = get_request()
+
+    # Download tile metadata
+    metadata_params = {"f": "pjson"}
+    metadata_url = f"{image_server_url}/{file_params['rasterId']}"
+    metadata_response = requests.get(metadata_url, params=metadata_params)
+    metadata_filename = f"{os.path.splitext(filename)[0]}.json"
+    metadata_filepath = os.path.join(output_directory, metadata_filename)
+
+    # Save tile data
+    with open(output_filepath, "wb") as output_file:
+        output_file.write(response_file_endpoint_one_tile.content)
+    # Save tile metadata
+    with open(metadata_filepath, "w") as metadata_file:
+        json.dump(metadata_response.json(), metadata_file)
+
+    return output_filepath
+
+
 # Download all raster tiles from one service URL that intersect the bounding box
 # service_url = 'https://gis.stmk.gv.at/image/rest/services/OGD_DOP'
 def download_raster_tiles_from_service_url(
@@ -63,6 +166,8 @@ def download_raster_tiles_from_service_url(
     bbox_gpkg_path: Optional[Union[str, Path]] = None,
     max_retry: int = 5,
     outSRS: int = 32633,
+    parallel: bool = False,
+    max_workers: int = 10,
 ) -> List[Path]:
     """Downloads raster tiles from service URL intersecting bounding box.
 
@@ -70,9 +175,13 @@ def download_raster_tiles_from_service_url(
         service_url: Base URL of the service.
         service_name: Name of service to download tiles from.
         output_directory: Directory to save downloaded tiles.
-        bbox_gpkg_path: Path to GeoPackage file for bounding box.
+        bbox_gpkg_path: Path to GeoPackage file for bounding box. If None, all
+            tiles of the service are downloaded.
         max_retry: Maximum number of retries for failed requests.
         outSRS: Output spatial reference system.
+        parallel: Whether to gather metadata and download tiles in parallel.
+            Recommended when downloading large areas (e.g. a whole service).
+        max_workers: Maximum number of parallel workers (only used if parallel).
 
     Returns:
         List of paths to downloaded raster tiles.
@@ -117,77 +226,80 @@ def download_raster_tiles_from_service_url(
     with open(metadata_filepath, "w") as metadata_file:
         json.dump(metadata_response.json(), metadata_file)
     print(f"Metadata saved to {metadata_filepath}")
-    file_param_list = {}
 
-    # Get parameters for relevant files
+    object_ids = data_all_tiles_one_service["objectIds"]
+    total_tiles = len(object_ids)
+
+    # Gather the file parameters for every relevant tile
     print("\n Gathering tile information...")
-    for tile_id in tqdm(
-        data_all_tiles_one_service["objectIds"], desc="Processing tiles"
-    ):
-        download_params = {"rasterIds": str(tile_id), "f": "json"}
+    tile_infos: List[Tuple[str, dict]] = []
+    if parallel and total_tiles > 1:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [
+                executor.submit(_get_tile_metadata, tile_id, download_url)
+                for tile_id in object_ids
+            ]
+            for future in tqdm(
+                as_completed(futures), total=total_tiles, desc="Processing tiles"
+            ):
+                result = future.result()
+                if result is not None:
+                    tile_infos.append(result)
+    else:
+        for tile_id in tqdm(object_ids, desc="Processing tiles"):
+            result = _get_tile_metadata(tile_id, download_url)
+            if result is not None:
+                tile_infos.append(result)
 
-        response_download_one_tile = requests.get(download_url, download_params)
-        response_download_one_tile.raise_for_status()
-        data_one_tile = response_download_one_tile.json()
-        if "error" in data_one_tile:
-            err = data_one_tile["error"]
-            print(f'Error details: {data_one_tile["error"]["details"][0]}')
-            raise RuntimeError(f'{err["code"]}: {err["message"]}')
+    # Deduplicate by filename (preserves original dict-based behaviour)
+    file_param_list = {filename: file_params for filename, file_params in tile_infos}
 
-        tile_filepath = data_one_tile["rasterFiles"][0]["id"]
+    output_files: List[Path] = []
 
-        # Skip files that start with "Ov_" -> these are overview tiles that we don't need
-        filename = tile_filepath.split("\\")[-1]
-        if not filename.startswith("Ov_"):
-            file_params = {
-                "id": tile_filepath,
-                "rasterId": str(tile_id),
-            }
-
-            file_param_list[filename] = file_params
-
-    output_files = []
-
-    # download each tile and write to output directory
+    # Download each tile and write to output directory
     print("\n Downloading tiles...")
-    for filename, file_params in tqdm(
-        file_param_list.items(), desc="Downloading tiles"
-    ):
-        output_filepath = Path(os.path.join(output_directory, filename))
-
-        # Check if tile is already downloaded
-        if os.path.isfile(output_filepath):
-            output_files.append(output_filepath)
-            continue
-
-        def get_request(retries=1):
+    if parallel and len(file_param_list) > 1:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_filename = {
+                executor.submit(
+                    _download_single_tile,
+                    filename,
+                    file_params,
+                    file_endpoint_url,
+                    output_directory,
+                    image_server_url,
+                    max_retry,
+                ): filename
+                for filename, file_params in file_param_list.items()
+            }
+            for future in tqdm(
+                as_completed(future_to_filename),
+                total=len(future_to_filename),
+                desc="Downloading tiles",
+            ):
+                filename = future_to_filename[future]
+                try:
+                    output_files.append(future.result())
+                except Exception as exc:
+                    print(f"Download failed for {filename}: {exc}")
+    else:
+        for filename, file_params in tqdm(
+            file_param_list.items(), desc="Downloading tiles"
+        ):
             try:
-                return requests.get(file_endpoint_url, file_params)
-            except Exception as e:
-                print(f"Request failed: {e}")
-                if retries >= max_retry:
-                    raise Exception from e
-                retries += 1
+                output_files.append(
+                    _download_single_tile(
+                        filename,
+                        file_params,
+                        file_endpoint_url,
+                        output_directory,
+                        image_server_url,
+                        max_retry,
+                    )
+                )
+            except Exception as exc:
+                print(f"Download failed for {filename}: {exc}")
 
-                print("Repeating request ...")
-                return get_request(retries=retries)
-
-        response_file_endpoint_one_tile = get_request()
-
-        # Download tile metadata
-        metadata_params = {"f": "pjson"}
-        metadata_url = f"{image_server_url}/{file_params['rasterId']}"
-        metadata_response = requests.get(metadata_url, params=metadata_params)
-        metadata_filename = f"{os.path.splitext(filename)[0]}.json"
-        metadata_filepath = os.path.join(output_directory, metadata_filename)
-
-        # Save tile data
-        with open(output_filepath, "wb") as output_file:
-            output_file.write(response_file_endpoint_one_tile.content)
-        # Save tile metadata
-        with open(metadata_filepath, "w") as metadata_file:
-            json.dump(metadata_response.json(), metadata_file)
-        output_files.append(output_filepath)
     print(f"Downloaded {len(output_files)} tiles to {output_directory}")
 
     return output_files
@@ -202,6 +314,8 @@ def download_and_create_cog(
     max_retry: int = 5,
     outSRS: int = 32633,
     out_nodata_value: Optional[Union[float, int]] = None,
+    parallel: bool = False,
+    max_workers: int = 10,
 ) -> None:
     """Downloads raster tiles and creates a COG.
 
@@ -214,6 +328,8 @@ def download_and_create_cog(
         max_retry: Maximum number of retries for failed requests.
         outSRS: Output spatial reference system.
         out_nodata_value: Nodata value for output (pixel values unchanged).
+        parallel: Whether to download tiles in parallel.
+        max_workers: Maximum number of parallel workers (only used if parallel).
 
     Raises:
         Exception: If error occurs during processing.
@@ -241,6 +357,8 @@ def download_and_create_cog(
             bbox_gpkg_path=bbox_gpkg_path,
             max_retry=max_retry,
             outSRS=outSRS,
+            parallel=parallel,
+            max_workers=max_workers,
         )
 
         # Create VRT

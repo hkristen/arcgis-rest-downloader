@@ -66,9 +66,30 @@ python scripts/download_whole_archive.py --preset dom --services all \
 
 Run `python scripts/download_whole_archive.py --help` for all options.
 
-Notes on coverage:
-- The `orthophoto` preset covers only the RGB and Falschfarben (CIR) imagery (`OGD_DOP` endpoint).
-- For elevation, only `ALS_Hoehen_aktuell_DOM_UTM33N_32633` covers the whole province (its extent matches the orthophotos), so it is the `dom` preset default. The `ALS_Hoehen_2008_2014_*` campaign spans only a ~154x95 km sub-area, and the `ALS_Hoehen_2022_2027_*` campaign is still incomplete. To grab a specific campaign or the DGM (terrain) instead, pass it via `--services`.
+#### Orthophoto preset
+
+The `orthophoto` preset downloads the consistent 20 cm, 3-band imagery, both RGB and Falschfarben (CIR), for every campaign from 2008 onward. All of these cover the whole province (~200 x 138 km).
+
+| Service | Years | Type | Resolution | Bands | In preset |
+| --- | --- | --- | --- | --- | --- |
+| `Falschfarben_2008_2011` | 2008-2011 | CIR | 20 cm | 3 | yes |
+| `Flug_2008_2011_RGB` | 2008-2011 | RGB | 20 cm | 3 | yes |
+| `Falschfarben_2013_2015` | 2013-2015 | CIR | 20 cm | 3 | yes |
+| `Flug_2013_2015_RGB` | 2013-2015 | RGB | 20 cm | 3 | yes |
+| `Falschfarben_2016_2018` | 2016-2018 | CIR | 20 cm | 3 | yes |
+| `Flug_2016_2018_RGB` | 2016-2018 | RGB | 20 cm | 3 | yes |
+| `Falschfarben_2019_2021` | 2019-2021 | CIR | 20 cm | 3 | yes |
+| `Flug_2019_2021_RGB` | 2019-2021 | RGB | 20 cm | 3 | yes |
+| `Falschfarben_2022_2024` | 2022-2024 | CIR | 20 cm | 3 | yes |
+| `Flug_2022_2024_RGB` | 2022-2024 | RGB | 20 cm | 3 | yes |
+| `Flug_2003_2007_RGB` | 2003-2007 | RGB | 25 cm | 3 | no (different resolution) |
+| `SW_1994_2001` | 1994-2001 | B/W | 50 cm | 1 | no (black & white) |
+
+The two excluded services are still downloadable via `--services` if you need them.
+
+#### DOM preset
+
+For elevation, only `ALS_Hoehen_aktuell_DOM_UTM33N_32633` covers the whole province (its extent matches the orthophotos), so it is the `dom` preset default. The `ALS_Hoehen_2008_2014_*` campaign spans only a ~154 x 95 km sub-area, and the `ALS_Hoehen_2022_2027_*` campaign is still incomplete. To grab a specific campaign or the DGM (terrain) instead, pass it via `--services`.
 
 ## ToDo
 - Implement processing of DEM data to generate derived products (e.g., slope, aspect).

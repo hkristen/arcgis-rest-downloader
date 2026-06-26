@@ -41,22 +41,23 @@ from src.arcgis_rest_downloader import (  # noqa: E402
 
 # Built-in presets: endpoint URL + sensible default service list.
 PRESETS = {
-    # RGB and Falschfarben (CIR) orthophotos. Services available as of May 2025.
+    # RGB and Falschfarben (CIR) orthophotos at a consistent 20 cm resolution,
+    # 3 bands each, provincewide. The older B/W (SW_1994_2001, 50 cm, 1 band)
+    # and Flug_2003_2007_RGB (25 cm) are deliberately excluded; pass them via
+    # --services if you want them. Services available as of May 2025.
     "orthophoto": {
         "service_url": "https://gis.stmk.gv.at/image/rest/services/OGD_DOP",
         "services": [
             "Falschfarben_2008_2011",
-            "Falschfarben_2013_2015",
-            "Falschfarben_2016_2018",
-            "Falschfarben_2019_2021",
-            "Falschfarben_2022_2024",
-            "Flug_2003_2007_RGB",
             "Flug_2008_2011_RGB",
+            "Falschfarben_2013_2015",
             "Flug_2013_2015_RGB",
+            "Falschfarben_2016_2018",
             "Flug_2016_2018_RGB",
+            "Falschfarben_2019_2021",
             "Flug_2019_2021_RGB",
+            "Falschfarben_2022_2024",
             "Flug_2022_2024_RGB",
-            "SW_1994_2001",
         ],
     },
     # Digital surface model (DOM). Of the DOM services on the OGD_Hoehen

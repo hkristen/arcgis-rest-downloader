@@ -58,7 +58,7 @@ Only `ALS_Hoehen_aktuell_DOM_UTM33N_32633` covers the whole province, so it is t
 - Implement processing of DEM data to generate derived products (e.g., slope, aspect).
 
 ## Authors
-This project was developed by [Daniel Kulmer](https://www.joanneum.at/personen/daniel-kulmer-bsc/) and [Harald Kristen](https://www.linkedin.com/in/harald-kristen/) whilst working on the FFG funded project [Habitalp 2.0](https://projekte.ffg.at/projekt/5123116).
+This project was developed by [Daniel Kulmer](https://www.linkedin.com/in/daniel-kulmer-b45271399/) and [Harald Kristen](https://www.linkedin.com/in/harald-kristen/) whilst working on the FFG funded project [Habitalp 2.0](https://projekte.ffg.at/projekt/5123116).
 
 ## License
 

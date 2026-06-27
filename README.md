@@ -36,23 +36,23 @@ Override the defaults with `--services NAME ...` (or `--services all`) to pick s
 
 #### Orthophoto preset
 
-Consistent 20 cm, 3-band imagery (RGB + Falschfarben/CIR) for every campaign from 2008 onward, all covering the whole province (~200 x 138 km). Tiles and size below are the CIR + RGB pair combined:
+Consistent 20 cm, 3-band imagery (RGB + Falschfarben/CIR) for every campaign from 2008 onward, all covering the whole province (~200 x 138 km):
 
-| Service | Years | Type | Resolution | Tiles | ~Size | In preset |
-| --- | --- | --- | --- | --- | --- | --- |
-| `Falschfarben_2008_2011` / `Flug_2008_2011_RGB` | 2008-2011 | CIR / RGB | 20 cm | ~31,000 | ~0.9 TB | yes |
-| `Falschfarben_2013_2015` / `Flug_2013_2015_RGB` | 2013-2015 | CIR / RGB | 20 cm | ~39,000 | ~1.1 TB | yes |
-| `Falschfarben_2016_2018` / `Flug_2016_2018_RGB` | 2016-2018 | CIR / RGB | 20 cm | ~37,000 | ~270 GB | yes |
-| `Falschfarben_2019_2021` / `Flug_2019_2021_RGB` | 2019-2021 | CIR / RGB | 20 cm | ~37,000 | ~310 GB | yes |
-| `Falschfarben_2022_2024` / `Flug_2022_2024_RGB` | 2022-2024 | CIR / RGB | 20 cm | ~35,000 | ~300 GB | yes |
-| `Flug_2003_2007_RGB` | 2003-2007 | RGB | 25 cm | ~20,000 | n/a | no (different resolution) |
-| `SW_1994_2001` | 1994-2001 | B/W | 50 cm | ~3,400 | n/a | no (black & white) |
+| Service | Years | Type | Resolution | In preset |
+| --- | --- | --- | --- | --- |
+| `Falschfarben_2008_2011` / `Flug_2008_2011_RGB` | 2008-2011 | CIR / RGB | 20 cm | yes |
+| `Falschfarben_2013_2015` / `Flug_2013_2015_RGB` | 2013-2015 | CIR / RGB | 20 cm | yes |
+| `Falschfarben_2016_2018` / `Flug_2016_2018_RGB` | 2016-2018 | CIR / RGB | 20 cm | yes |
+| `Falschfarben_2019_2021` / `Flug_2019_2021_RGB` | 2019-2021 | CIR / RGB | 20 cm | yes |
+| `Falschfarben_2022_2024` / `Flug_2022_2024_RGB` | 2022-2024 | CIR / RGB | 20 cm | yes |
+| `Flug_2003_2007_RGB` | 2003-2007 | RGB | 25 cm | no (different resolution) |
+| `SW_1994_2001` | 1994-2001 | B/W | 50 cm | no (black & white) |
 
-The full preset is **~180,000 tiles, roughly 2.9 TB** (the 2008-2015 campaigns are far heavier per tile than 2016 onward, which use stronger compression). Sizes are extrapolated from per-service tile sampling, so expect ±20%. The excluded services are still reachable via `--services`.
+The excluded services are still reachable via `--services`.
 
 #### DOM preset
 
-Only `ALS_Hoehen_aktuell_DOM_UTM33N_32633` covers the whole province, so it is the `dom` default (~20,000 tiles, roughly 85 GB). The `ALS_Hoehen_2008_2014_*` campaign spans only ~154 x 95 km and `ALS_Hoehen_2022_2027_*` is still incomplete. Use `--services` for a specific campaign or the DGM (terrain).
+Only `ALS_Hoehen_aktuell_DOM_UTM33N_32633` covers the whole province, so it is the `dom` default. The `ALS_Hoehen_2008_2014_*` campaign spans only ~154 x 95 km and `ALS_Hoehen_2022_2027_*` is still incomplete. Use `--services` for a specific campaign or the DGM (terrain).
 
 ## ToDo
 - Implement processing of DEM data to generate derived products (e.g., slope, aspect).
